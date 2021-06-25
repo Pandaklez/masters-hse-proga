@@ -1,0 +1,541 @@
+---
+title: "HWScott"
+author: "Anna Klezovich"
+date: "23 06 2021"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+library(dplyr)
+```
+
+```{r}
+mono_socio <- read_csv2("https://raw.githubusercontent.com/LingData2019/LingData2020/master/data/greek-word-order-mono_socio.txt")
+head(mono_socio)
+```
+
+```{r}
+mono <- read_csv2("https://raw.githubusercontent.com/LingData2019/LingData2020/master/data/greek-word-order-mono-acceptability-coded-rt.txt")
+head(mono)
+```
+
+## 1. Data overview
+
+**1.1**
+
+Use mono_socio dataframe to answer the following questions:
+
+1. How many participants are mentioned in this dataframe?
+
+```{r}
+n_distinct(mono_socio$ParticipantID)
+```
+
+2. How many of them are males and females?
+
+```{r}
+mono_socio %>%
+  filter(QuestionCategory=='sex') %>%
+  group_by(Responce) %>% 
+  count()
+```
+
+3. Which education levels are mentioned in the dataframe?
+
+```{r}
+mono_socio %>%
+  filter(QuestionCategory=='education') %>%
+  group_by(Responce) %>%
+  count()
+```
+
+There are 4 education levels
+
+4. How many participants of each education levels are present?
+
+```{r}
+mono_socio %>%
+  filter(QuestionCategory=='education') %>%
+  distinct() %>%
+  group_by(Responce) %>%
+  count()
+
+```
+
+The same result as in the previous result, which basically says there are no doubled answers. It would be weird if one participant answered the same question more than once.
+
+5. How many left- and right-randed participants are present?
+
+```{r}
+mono_socio %>%
+  filter(QuestionCategory=='handedness') %>%
+  distinct() %>%
+  group_by(Responce) %>%
+  count()
+```
+
+- Compare you overview with that reported in Table 2 of the article. Sometimes replication data provided by authors does not allow one to reproduce their results.
+
+So I checked it out here - https://peerj.com/articles/7438/#materials|methods . Everything holds, except for level of education, because the authors split it into two categories Tertiary Vs. secondary, but if you sum our data, this holds too.
+
+**1.2**
+
+Create a plot that shows the RT distribution in experiment 1 (all participants and conditions taken together). What kind of plot would you choose? Use ggplot() for this problem.
+
+```{r}
+suppressPackageStartupMessages(library(ggplot2))
+```
+
+```{r}
+ggplot(mono, aes(x=RT)) + 
+  geom_density()
+```
+
+I would say that the data in RT does not follow normal distribution, because there is a long right tail.
+
+**1.3**
+
+Normalise data applying the logarithm with base 10 (RTlog = log10(RT)). Use mutate.
+
+```{r}
+mono_norm <- mono %>% 
+  mutate(RTlog = log10(RT))
+nrow(mono_norm)
+```
+
+**1.4**
+
+Create a density plot that shows the RTlog distribution.
+
+Can we say that RTlog approximately follows normal distribution? What features of RTlog distribution contradicts this assumption? (E.g. long left tail, long right tail, outliers, skewness, etc.)
+
+```{r}
+ggplot(mono_norm, aes(x=RTlog)) + 
+  geom_density()
+```
+
+```{r}
+# compare with normal distribution
+ggplot(data = data.frame(x = c(-3, 3)), aes(x)) +
+  stat_function(fun = dnorm, n = 101, args = list(mean = 0, sd = 1)) +
+  ylab("") +
+  scale_y_continuous(breaks = NULL)
+```
+
+RTlog has a bit longer left tail and it is in general a bit skewed (the right part of the graph is more convex).
+
+**1.5**
+
+Give a summary of RTlog distribution (min, max, mean, median, standard deviation)
+
+```{r}
+summary(mono_norm$RTlog)
+```
+
+```{r}
+sd(mono_norm$RTlog)
+```
+
+**1.6**
+
+To filter out outliers, remove from the table the following observations:
+
+* responses RT of which is below 600 ms (i.e., when a button is pressed too fast, without allowing enough time for actual consideration of the presented stimuli)
+
+```{r}
+mono_norm <- mono_norm %>%
+  filter(RT >= 600)
+nrow(mono_norm)
+```
+
+* responses RTlog of which deviates from the mean value of RTlog for more than 3 standard deviations
+
+```{r}
+mono_norm <- mono_norm %>%
+  filter(RTlog < (3.329 + 3 * 0.2076783) & RTlog > (3.329 - 3 * 0.2076783))
+nrow(mono_norm)
+```
+
+* fillers (both acceptable and unacceptable)
+Convert relevant variables to factors and save fitered data as mono1.
+
+```{r}
+mono_norm <- mono_norm %>%
+  filter((TypeOfStimuli != 'FillerAcceptable')& (TypeOfStimuli != 'FillerUnacceptable'))
+nrow(mono_norm)
+```
+
+Convert relevant variables to factors and save fitered data as mono1.
+
+```{r}
+# head(mono_norm)
+# select(ParticipantID, TypeOfStimuli, WordOrder, AcceptabilityJ = 
+# ResponseAcceptabilityJudgement, RTlog) %>% 
+#  mutate(ParticipantID = as.factor(ParticipantID),
+# do more convertion here 
+
+mono1 <- mono_norm %>%
+  select(ParticipantID, TypeOfStimuli, WordOrder, AcceptabilityJ = ResponseAcceptabilityJudgement, RTlog) %>%
+  mutate(ParticipantID = as.factor(ParticipantID), TypeOfStimuli = as.factor(TypeOfStimuli), WordOrder = as.factor(WordOrder), AcceptabilityJ = as.factor(AcceptabilityJ))
+
+head(mono1)
+```
+
+**1.7**
+
+Calculate the number of observations in mono1.
+
+```{r}
+nrow(mono1)
+```
+
+**1.8**
+
+Reproduce Figure 1 from the article using ggplot.
+
+Hint: You can make a summary and use geom_col() (see example here). Use either facet_wrap or facet_grid to make six plots. Note that we figures created in 1.8-1.10 may look different from what plotted in the article.
+
+```{r}
+mono1 %>%
+  select(WordOrder, TypeOfStimuli, AcceptabilityJ) %>%
+  group_by(TypeOfStimuli, WordOrder, AcceptabilityJ) %>% 
+  summarise(number = n()) %>% 
+  ggplot(aes(x=TypeOfStimuli, y=number, fill=AcceptabilityJ))+
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(subtitle = "Acceptability judgment (AJ) ratings across orders and conditions in monolinguals") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5)) +
+  facet_wrap(~WordOrder)
+```
+
+**1.9**
+
+Reproduce Figure 2 from the article using ggplot.
+
+```{r}
+mono1 %>%
+  select(WordOrder, AcceptabilityJ) %>%
+  group_by(WordOrder, AcceptabilityJ) %>% 
+  summarise(number = n()) %>% 
+  ggplot(aes(x=WordOrder, y=number, fill=AcceptabilityJ))+
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(subtitle = "Acceptability judgment (AJ) ratings in monolinguals, split by congruency.")
+```
+
+**1.10**
+
+Reproduce Figure 7 from the article using ggplot.
+
+```{r}
+mono1 %>%
+  select(WordOrder, RTlog, AcceptabilityJ) %>%
+  group_by(RTlog, WordOrder, AcceptabilityJ) %>% 
+  ggplot(aes(x=AcceptabilityJ, y=RTlog, fill=WordOrder))+
+  geom_violin(width=1, position = position_dodge(width = 1)) +
+    geom_boxplot(width=0.1, color="grey", alpha=0.2, position = position_dodge(width = 1)) +
+  theme(
+      legend.position="right",
+      plot.title = element_text(size=11)
+    ) +
+  labs(subtitle = "AJ and RT for congruent and incongruent orders (monolinguals)", x = "AJ")
+```
+
+**1.11**
+
+For the same data, draw a lineplot for group means and standard errors using ggline():
+
+```{r}
+# stolen from here http://www.sthda.com/english/wiki/ggplot2-line-plot-quick-start-guide-r-software-and-data-visualization 
+data_summary <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func,
+                  varname)
+  data_sum <- rename(data_sum, c("mean" = varname))
+ return(data_sum)
+}
+```
+
+```{r}
+datasum <- data_summary(mono1, varname="RTlog", groupnames=c("AcceptabilityJ", "WordOrder", "TypeOfStimuli"))
+datasum
+```
+
+```{r}
+ggplot(datasum, aes(x=WordOrder, y=RTlog, group=TypeOfStimuli, color=TypeOfStimuli)) + 
+    geom_errorbar(aes(ymin=RTlog-sd, ymax=RTlog+sd), width=.1) +
+    geom_line() + geom_point()+
+   scale_color_brewer(palette="Paired")+theme_minimal()
+```
+
+```{r}
+ggplot(datasum, aes(x=AcceptabilityJ, y=RTlog, group=WordOrder, color=WordOrder)) + 
+    geom_errorbar(aes(ymin=RTlog-sd, ymax=RTlog+sd), width=.1) +
+    geom_line() + geom_point()+
+   scale_color_brewer(palette="Paired")+theme_minimal()
+```
+
+## 2. Difference in reaction time
+
+**2.1 Summarising**
+
+Use group_by and summarise to find mean logarithm of reaction time for each participant and each word order. Put this dataframe to mean_rtlog_long variable. It should be like
+
+```
+A tibble: 280 x 3
+   ParticipantID                    WordOrder   RTlog
+   <fct>                            <fct>       <dbl>
+ 1 00e0b159cf5b9abcc73b92506d8b1c38 Congruent    3.24
+ 2 00e0b159cf5b9abcc73b92506d8b1c38 Incongruent  3.47
+ 3 021a49cde484f8fa18439f026ec99459 Congruent    3.22
+ 4 021a49cde484f8fa18439f026ec99459 Incongruent  3.21
+ ...
+```
+
+```{r}
+library(dplyr)
+mean_rtlog_long <- mono1 %>%
+  dplyr::group_by(ParticipantID, WordOrder) %>%
+  dplyr::summarise(RTlog = mean(RTlog,  na.rm = TRUE))
+mean_rtlog_long
+```
+
+
+**2.2. Pivoting**
+
+Use pivot_wider to spread values of RTlog in mean_rtlog_long into two columns: Congruent and Incongruent. Put new dataframe in variable mean_rtlog. It should look like
+
+```
+A tibble: 140 x 3
+   ParticipantID                    Congruent Incongruent
+   <fct>                                <dbl>       <dbl>
+ 1 00e0b159cf5b9abcc73b92506d8b1c38      3.24        3.47
+ 2 021a49cde484f8fa18439f026ec99459      3.22        3.21
+ 3 02810ff2a65eae2b3e54ac57d906309d      3.46        3.36
+```
+
+```{r}
+mean_rtlog <- mean_rtlog_long %>% 
+  pivot_wider(names_from="WordOrder", values_from="RTlog")
+
+head(mean_rtlog)
+```
+
+**2.3. Two-sample t-test**
+
+Let us try to apply two-sample t-test to our data. Consider values in columns Congruent and Incongruent as two independent samples. Our null hypothesis is that these two samples are from populations with equal means. Alternative hypothesis: population mean for incongruate word order is larger (people need more time to ’parse’ it). Use t.test function to perform a test. Don’t forget to specify alternative.
+
+```{r}
+t.test(RTlog ~ WordOrder, data = mean_rtlog_long, paired = FALSE)
+```
+
+Would you reject null hypothesis (under 5% significance level) according to this test?
+
+The difference may lie in the confidence interval from -0.051 to 0.019. However, the p-value shows that the result is not statistically significant since it is above 0.05. So we can not reject null hypothesis yet.
+
+**2.4. Paired t-test: manually**
+
+To use paired t-test, let us find difference between logarithms of reaction time for each participant. Use mutate and add variable diff with aforementioned meaning to dataframe mean_rtlog. Save result as mean_rtlog again. Then compare mean of diff with 0 using 1-sample t-test. (Use appropriate alternative.)
+
+```{r}
+mean_rtlog <- mean_rtlog %>%
+  mutate(diff = Congruent - Incongruent)
+head(mean_rtlog)
+```
+
+```{r}
+t.test(mean_rtlog$diff, mu = 0)
+```
+
+Whould you reject null hypothesis?
+
+Yes, i would reject null hypothesis because p-value is lower than 0.05
+
+What claim about logarithms of reaction time for Congruent and Incongruent stimuli can you make now?
+
+The difference in logarithms of reaction time between congruent and incongruent orders is different from theoretical value - zero. Therefore there is a significant difference between these samples.
+
+How can you interpret difference with the result of 2.3?
+
+2.3 was a two-sided independent t-test. Now I am gonna cite our course website a little:
+
+> Независимость значений (или пар) в выборке. Типичным примером нарушения независимости является случай, когда t-тест применяется на неусредненных (например, по испытуемому) значениях. Еще один пример нарушения независимости — использование одного наблюдения несколько раз или использование одного и того же испытуемого несколько раз. Определить независимость можно следующим мысленным экспериментом: могу ли я хоть как-нибудь предсказать следующее значение в выборке? Например, в случае с несколькими значениями от одного испытуемого я могу ориентироваться на его предыдущие результаты и предсказать последующие результаты лучше, чем на основе простого среднего по всем остальным значениям. Это значит, что допущение о независимости нарушено.
+
+I think this is the reason why. In this research one participant answered several questions, so it makes congruent Vs incongruent dependable variables, because people can have biases and etc.
+
+**2.5. Paired t-test out of the box**
+
+In fact, we can avoid manual calculation of difference and perform paired t-test using t.test function with parameter paired = True. Apply this function to your data and make sure you get the same result as in 2.4.
+
+```{r}
+t.test(mean_rtlog$Congruent, mean_rtlog$Incongruent, paired = TRUE)
+```
+
+As you can see result is the same as in 2.4
+
+## 3. Difference between conditions
+
+**3.1 Data preparation**
+
+Filter only observation with Incongruent word order, then find average logarithm of reaction time for each participant and each type of stimuli. Save new dataframe as incong_rtlog variable.
+
+```
+# A tibble: 420 x 3
+   ParticipantID                    TypeOfStimuli              RTlog
+   <fct>                            <fct>                      <dbl>
+ 1 00e0b159cf5b9abcc73b92506d8b1c38 Shape-Color                 3.34
+ 2 00e0b159cf5b9abcc73b92506d8b1c38 Size-Nationality            3.20
+ 3 00e0b159cf5b9abcc73b92506d8b1c38 SubjectiveComment-Material  3.19
+ 4 021a49cde484f8fa18439f026ec99459 Shape-Color                 3.20
+```
+
+```{r}
+incong_rtlog <- mono1 %>%
+  filter(WordOrder == "Incongruent")
+```
+
+```{r}
+library(dplyr)
+incong_rtlog <- incong_rtlog %>%
+  dplyr::group_by(ParticipantID, TypeOfStimuli) %>%
+  dplyr::summarise(RTlog = mean(RTlog,  na.rm = TRUE))
+```
+
+```{r}
+head(incong_rtlog)
+```
+
+**3.2 Statistical testing**
+
+Use appropriate statistical test to answer the following question: are there any statistically significant difference in logarithm of reaction time for different conditions (types of stimuli)? Choose the test and provide justification for your choice. Provide your code, results and interpretation. What is your answer to the question?
+
+I choose three paired t-tests where I compare mean diff between types of stimuli with zero (null hypothesis: there is no significant difference)
+
+```{r}
+incong_rtlog_wide <- incong_rtlog %>% 
+  pivot_wider(names_from=vctrs::vec_as_names("TypeOfStimuli"), values_from="RTlog")
+
+# 3 paired t-tests
+t.test(incong_rtlog_wide$"Size-Nationality", incong_rtlog_wide$"SubjectiveComment-Material", paired = TRUE)
+```
+
+```{r}
+t.test(incong_rtlog_wide$"Size-Nationality", incong_rtlog_wide$"Shape-Color", paired = TRUE)
+```
+Here there is no significant difference.
+
+```{r}
+t.test(incong_rtlog_wide$"SubjectiveComment-Material", incong_rtlog_wide$"Shape-Color", paired = TRUE)
+```
+
+**3.3 Post-hoc analysis: which differences are significant?**
+
+```{r}
+```
+
+## 4. Multivariate linear regression
+
+**4.1**
+
+Using the mono1 data, fit and compare two models that predict RTlog:
+* using Acceptability Judgements as predictor, and
+* using Acceptability Judgements and TypeOfStimuli as predictors
+
+```{r}
+m1 <- lm(RTlog ~ AcceptabilityJ, mono1) 
+summary(m1)
+```
+
+```{r}
+m2 <- lm(RTlog ~ AcceptabilityJ + TypeOfStimuli, mono1) 
+summary(m2)
+```
+
+Both models show significant p-values. The second model seems to be a bit better, because R-squared is better there.
+
+```{r}
+anova(m1, m2)
+```
+
+**4.2**
+
+Add interaction of two predictors in the model.
+
+```{r}
+m3 <- lm(RTlog ~ AcceptabilityJ + TypeOfStimuli + AcceptabilityJ*TypeOfStimuli, mono1) 
+summary(m3)
+```
+```{r}
+anova(m2, m3)
+```
+
+In terms of R-squared the third model is relatively the same as the second one. Interestingly some of the interactions have big p-values and are not statistically significant.
+
+**4.3**
+
+Which of the models fits data the best?
+
+I would say the second one, because it's relatively the same as third one, but the third one requieres more unnecessary computations for interactions which are simply not there.
+
+## 5. Binary classification
+
+**5.1**
+
+It can happen that the some parts of data are not provided by the authors. Let us assume that WordOrder is a variable one want to predict (Data: mono1). Suggest at least one type of models to predict this dependent variable. Run the code and find the minimal optimal model (model with predictors that show the statistical significance).
+
+I think mixed model would be best here, because participants might introduce some random bias
+
+Let's try several glmer models with different formulas and then compare
+
+```{r}
+library(lme4)
+m4 <- glmer(WordOrder ~ AcceptabilityJ + TypeOfStimuli + RTlog + (1|ParticipantID), mono1, family = binomial) 
+summary(m4)
+```
+
+I got singular fit with this one, it probably has redundant predictors. Let's try to exclude one
+
+```{r}
+m5 <- glmer(WordOrder ~ AcceptabilityJ + (AcceptabilityJ|ParticipantID) + (1|TypeOfStimuli), mono1, family = binomial) 
+summary(m5)
+```
+
+```{r}
+m6 <- glmer(WordOrder ~ AcceptabilityJ + (1|ParticipantID) + (1|TypeOfStimuli), mono1, family = binomial) 
+summary(m6)
+```
+
+**5.2**
+Interpret the summary of this model. Write down your conclusions.
+
+Well I got singular fit on every model, so probably glmer is a bit of overkill for this task, however, I like my last formula, it gives better summary
+
+```{r}
+anova(m4, m5, m6)
+```
+
+Surprisingly, according to AIC and BIC, my last model was the worst, and the first model - m4, was the best and the most descriptive.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
